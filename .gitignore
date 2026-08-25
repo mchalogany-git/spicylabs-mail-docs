@@ -1,0 +1,30 @@
+# This repository lives at the root of a Windows user profile, which
+# contains many sensitive files by nature (SSH keys, passwords, VPN/RDP
+# certificates, network configs, etc.). Rather than trying to enumerate
+# every sensitive file/pattern (new ones will keep appearing here), this
+# .gitignore uses an ALLOWLIST strategy: everything is ignored by default,
+# and only specific, intentional documentation files are allowed in.
+#
+# To track a new file in this repo, add an explicit "!" rule for it below.
+# Do NOT switch this to a denylist approach in this directory.
+
+# Ignore everything by default.
+*
+
+# Never ignore this file itself.
+!.gitignore
+
+# Allow the Documents directory to be traversed...
+!/Documents/
+
+# ...but only allow specific known-safe files within it.
+!/Documents/spicylabs-mail-troubleshooting-README.md
+
+# Explicitly called out for clarity (already covered by the default-deny
+# above, listed here just to document what must NEVER be tracked):
+# - .ssh/                          (private keys)
+# - AppData/                       (app data, caches, credentials)
+# - Documents/*.txt, Documents/*.rdp   (passwords, PSKs, IP configs, RDP files)
+# - *.cer                          (certificates)
+# - NTUSER.DAT*, ntuser.*          (Windows user registry hive)
+# - Desktop/, Downloads/, Pictures/, Videos/, Music/, Contacts/, Favorites/, Links/, Saved Games/, Searches/
