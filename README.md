@@ -1,6 +1,19 @@
 # spicylabs.online — Inbound Mail Outage: Troubleshooting & Reference
 
-## Summary
+## Incident log
+This domain has had two separate silent inbound-mail outages, each caused by
+a different part of the Tailscale-based relay chain. Both went unnoticed for
+days because nothing was actively monitoring end-to-end mail delivery.
+
+- **Incident 1** (2026-08-12 to 2026-08-19): Tailscale DNS override on the
+  relay broke Postfix's public DNS lookups. Details below in this README.
+- **Incident 2** (2026-09-08 to 2026-09-13): `tailscaled` on VM-SDC hung
+  internally while still reporting as `Running`. See
+  [`incidents/2026-09-13-vm-sdc-tailscale-hang.md`](incidents/2026-09-13-vm-sdc-tailscale-hang.md).
+  A watchdog script (`scripts/Watch-Tailscale.ps1`) was added as a result —
+  see "Monitoring" section below.
+
+## Summary (Incident 1)
 Inbound email to `@spicylabs.online` stopped arriving for about a week (roughly
 2026-08-12 through 2026-08-19). Root cause: Tailscale had taken over DNS
 resolution on the public-facing mail relay, blocking public DNS lookups that
@@ -35,9 +48,13 @@ Key hosts/identifiers:
   - Windows Firewall rule `hMailServer SMTP (Port 25)`: allowed, profile `Any`.
 - **Outbound relay (unrelated to inbound issue)**: Brevo
   (`smtp-relay.brevo.com:587`), used for sending mail out, not receiving.
-- **Access jump box**: `SRV-VDDVMDL5` — a workgroup (non-domain-joined)
-  Windows machine on the same LAN as VM-SDC, used to reach VM-SDC via WinRM
-  and the relay via SSH.
+- **Hyper-V host / access box**: `SRV-VDDVMDL5` — corrected in Incident 2:
+  this is the actual **Hyper-V host** running VM-SDC and the other homelab
+  VMs (not just a jump box as originally noted here). It's a workgroup
+  (non-domain-joined) Windows machine, used to reach VM-SDC via WinRM/Hyper-V
+  console and the relay via SSH. VM-SDC's Hyper-V VM object name on this
+  host is `VM-WINSRV-2025-DC2RY` (guest hostname `VM-SDC` differs from the
+  Hyper-V VM name).
 
 ## Access notes for future reference
 - **VM-SDC**: Not domain-joined relative to `SRV-VDDVMDL5`, so WinRM/PS
@@ -130,15 +147,31 @@ After the change:
   - Tailscale reconnected and VM-SDC is reachable on port 25 over the tunnel.
   - A post-reboot end-to-end test message was delivered successfully.
 
+## Monitoring
+Added after Incident 2: a watchdog Scheduled Task (`TailscaleWatchdog`) runs
+on VM-SDC as `SYSTEM` every 5 minutes, pinging the relay over Tailscale and
+force-restarting the local `Tailscale` service after 3 consecutive failed
+pings. Script: [`scripts/Watch-Tailscale.ps1`](scripts/Watch-Tailscale.ps1).
+Logs to `C:\ProgramData\Tailscale\Logs\watchdog.log`. This catches the
+"service shows Running but tunnel is internally dead" failure mode from
+Incident 2, but does **not** catch a repeat of the Incident 1 DNS-override
+scenario or other failure modes (Postfix crash, disk space, ISP outage) —
+see "Known limitations" in the Incident 2 doc.
+
 ## Suggested follow-ups (not yet done)
 - Add a scheduled health check on the relay that periodically verifies
   public DNS resolution and mail queue depth, with alerting on failure —
-  this outage went unnoticed for about a week.
+  the DNS-override outage (Incident 1) went unnoticed for about a week, and
+  nothing currently guards against a recurrence of that specific mode.
 - Install `rsyslog` on the relay so Postfix logs to `/var/log/mail.log`
   again (Debian 12 uses journald only by default), making future
   investigations much faster.
 - Consider basic rate-limiting/fail2ban on port 25 on the relay, since it's
   a small VPS directly exposed to the internet (a SYN-flood event was
   observed once, on 2026-07-23).
+- Consider an end-to-end synthetic canary (e.g. a periodic test email sent
+  and checked for arrival) to catch failure modes the current watchdog
+  can't see, since two different root causes have now silently broken
+  inbound mail for days each.
 - Keep this document updated if the relay, Tailscale tunnel, or hMailServer
   configuration changes.
